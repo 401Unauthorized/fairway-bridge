@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Launch Monitor Data Modifier</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+            background-color: #f9f9f9;
+        }
+        .container {
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        h2, h3 {
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 15px 0;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 10px;
+        }
+        .slider-label {
+            flex: 0 0 130px; /* Fixed width for labels */
+            font-size: 14px;
+            font-weight: 500;
+            text-align: left;
+        }
+        .slider-value {
+            flex: 0 0 40px; /* Fixed width for value display */
+            font-size: 14px;
+            font-weight: bold;
+            color: #007aff;
+            text-align: right;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            background: transparent;
+            margin: 0 10px;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 5px;
+            background: #007aff;
+            border-radius: 5px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            background: #ffffff;
+            border-radius: 50%;
+            border: 2px solid #007aff;
+            margin-top: -8px;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 22px;
+            height: 22px;
+            background: #ffffff;
+            border-radius: 50%;
+            border: 2px solid #007aff;
+        }
+        #log-box {
+            margin-top: 20px;
+            height: 150px;
+            overflow-y: scroll;
+            background: #ececec;
+            padding: 10px;
+            text-align: left;
+            border-radius: 10px;
+            font-size: 14px;
+            font-family: monospace;
+        }
+        img {
+            max-width: 50vw;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <img id="logo" src="assets/logo.png" alt="Stats Placeholder">
+    <h1>Fairway Bridge</h1>
+    <div id="sliders"></div>
+    <h3>Logs</h3>
+    <div id="log-box"></div>
+</div>
+
+<script>
+    const fields = {
+        ball_data: ["Speed", "SpinAxis", "TotalSpin", "HLA", "VLA"],
+        club_data: ["Speed", "AngleOfAttack", "FaceToTarget", "Lie", "Loft", "Path", "SpeedAtImpact", "VerticalFaceImpact", "HorizontalFaceImpact", "ClosureRate"]
+    };
+
+    let updateTimeout; // Variable to hold the timeout reference
+
+    function createSliders() {
+        let container = document.getElementById("sliders");
+
+        // Create a category title for ball data
+        let ballTitle = document.createElement("h3");
+        ballTitle.className = "category-title";
+        ballTitle.innerText = "Ball Modifier";
+        container.appendChild(ballTitle);
+
+        fields.ball_data.forEach(field => {
+            let div = document.createElement("div");
+            div.className = "slider-container";
+
+            let label = document.createElement("span");
+            label.className = "slider-label";
+            label.innerText = field.replace(/([A-Z])/g, ' $1').trim();
+
+            let slider = document.createElement("input");
+            slider.type = "range";
+            slider.min = -2;
+            slider.max = 2;
+            slider.step = 0.01;
+            slider.value = 1;
+            slider.className = "slider";
+            slider.dataset.category = "ball_data";
+            slider.dataset.field = field;
+
+            let valueDisplay = document.createElement("span");
+            valueDisplay.className = "slider-value";
+            valueDisplay.innerText = "1.00"; // Default value with two decimal places
+
+            slider.oninput = function() {
+                valueDisplay.innerText = parseFloat(slider.value).toFixed(2);
+                debounceUpdateModifiers();
+            };
+
+            div.appendChild(label);
+            div.appendChild(slider);
+            div.appendChild(valueDisplay);
+            container.appendChild(div);
+        });
+
+        // Create a category title for club data
+        let clubTitle = document.createElement("h3");
+        clubTitle.className = "category-title";
+        clubTitle.innerText = "Club Modifier";
+        container.appendChild(clubTitle);
+
+        fields.club_data.forEach(field => {
+            let div = document.createElement("div");
+            div.className = "slider-container";
+
+            let label = document.createElement("span");
+            label.className = "slider-label";
+            label.innerText = field.replace(/([A-Z])/g, ' $1').trim();
+
+            let slider = document.createElement("input");
+            slider.type = "range";
+            slider.min = -2;
+            slider.max = 2;
+            slider.step = 0.01;
+            slider.value = 1;
+            slider.className = "slider";
+            slider.dataset.category = "club_data";
+            slider.dataset.field = field;
+
+            let valueDisplay = document.createElement("span");
+            valueDisplay.className = "slider-value";
+            valueDisplay.innerText = "1.00";
+
+            slider.oninput = function() {
+                valueDisplay.innerText = parseFloat(slider.value).toFixed(2);
+                debounceUpdateModifiers();
+            };
+
+            div.appendChild(label);
+            div.appendChild(slider);
+            div.appendChild(valueDisplay);
+            container.appendChild(div);
+        });
+    }
+
+    function debounceUpdateModifiers() {
+        clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(updateModifiers, 500); // Wait 500ms before sending the request
+    }
+
+    // Updated to use the new backend endpoint and HTTP method
+    function updateModifiers() {
+        let newValues = { ball_data: {}, club_data: {} };
+
+        document.querySelectorAll(".slider").forEach(slider => {
+            let category = slider.dataset.category;
+            let field = slider.dataset.field;
+            newValues[category][field] = parseFloat(slider.value);
+        });
+
+        fetch("/modifiers", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newValues)
+        }).then(response => {
+            if (response.ok) fetchLogs();
+        });
+    }
+
+    let autoScroll = true; // Track whether to auto-scroll
+
+    document.getElementById("log-box").addEventListener("scroll", function() {
+        let logBox = this;
+        let isAtBottom = logBox.scrollHeight - logBox.clientHeight <= logBox.scrollTop + 5;
+        autoScroll = isAtBottom;
+    });
+
+    function fetchLogs() {
+        fetch("/logs")
+            .then(response => response.json())
+            .then(data => {
+                let logBox = document.getElementById("log-box");
+                let wasAtBottom = autoScroll; // Check auto-scroll state before updating logs
+                logBox.innerHTML = data.Logs.map(log => `<p>${log}</p>`).join("");
+                if (wasAtBottom) {
+                    logBox.scrollTop = logBox.scrollHeight; // Only auto-scroll if user was at the bottom
+                }
+            });
+    }
+
+    function loadInitialData() {
+        fetch("/modifiers")
+            .then(response => response.json())
+            .then(data => {
+                document.querySelectorAll(".slider").forEach(slider => {
+                    let category = slider.dataset.category;
+                    let field = slider.dataset.field;
+                    slider.value = data[category][field];
+                    slider.nextElementSibling.innerText = parseFloat(data[category][field]).toFixed(2);
+                });
+            });
+        fetchLogs();
+    }
+
+    window.onload = () => {
+        createSliders();
+        loadInitialData();
+        setInterval(fetchLogs, 5000);
+    };
+</script>
+</body>
+</html>

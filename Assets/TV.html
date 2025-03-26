@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Golf Simulator Display</title>
+    <style>
+        /* Full-screen layout */
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            justify-content: space-evenly;
+        }
+
+        /* Clock */
+        #clock {
+            font-size: 3vw;
+            font-weight: bold;
+            margin-top: 1vh;
+        }
+
+        /* Stats Image */
+        #stats-image {
+            width: 100%;
+            max-height: 30vh;
+            object-fit: contain;
+            background-color: #222;
+            margin-bottom: 10px;
+        }
+
+        /* Data Section */
+        .data-container {
+            display: flex;
+            flex-direction: row;
+            width: 100vw;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 2vw;
+        }
+
+        .data-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1vw;
+            border-radius: 1vw;
+            margin: 0 1vw;
+            width: 100%;
+        }
+
+        .section-title {
+            font-size: 3vw;
+            font-weight: bold;
+            margin-bottom: 1vh;
+            text-decoration: underline;
+        }
+
+        /* Grid layout for horizontal alignment */
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(10vw, 1fr));
+            gap: 1vw;
+            width: 100%;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .data-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 2vw;
+            padding: 0.5vw;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 0.5vw;
+        }
+
+        .label {
+            font-weight: 500;
+            font-size: 1.5vw;
+            text-transform: uppercase;
+        }
+
+        .value {
+            font-weight: bold;
+            font-size: 2.5vw;
+            color: #00ffcc;
+        }
+    </style>
+</head>
+<body>
+
+<div id="clock">Loading...</div>
+
+<!-- Updated stats image element to load from /stats-image endpoint -->
+<img id="stats-image" src="/stats-image" alt="Stats Image">
+
+<div class="data-container">
+    <div class="data-section">
+        <div class="section-title">Ball Modifiers</div>
+        <div id="ball-data" class="data-grid"></div>
+    </div>
+    <div class="data-section">
+        <div class="section-title">Club Modifiers</div>
+        <div id="club-data" class="data-grid"></div>
+    </div>
+</div>
+
+<script>
+    const defaultModifiers = {
+        ball_data: {
+            "Speed": 1.00, "SpinAxis": 1.00, "TotalSpin": 1.00,
+            "HLA": 1.00, "VLA": 1.00
+        },
+        club_data: {
+            "Speed": 1.00, "AngleOfAttack": 1.00, "FaceToTarget": 1.00,
+            "Lie": 1.00, "Loft": 1.00, "Path": 1.00,
+            "SpeedAtImpact": 1.00, "VerticalFaceImpact": 1.00, "HorizontalFaceImpact": 1.00, "ClosureRate": 1.00
+        }
+    };
+
+    function updateClock() {
+        const now = new Date();
+        const formattedTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const formattedDate = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        document.getElementById("clock").innerText = `${formattedDate} - ${formattedTime}`;
+    }
+
+    function updateModifiersDisplay(data) {
+        let ballHTML = "";
+        let clubHTML = "";
+
+        Object.entries(data.ball_data).forEach(([key, value]) => {
+            ballHTML += `<div class="data-item">
+                      <div class="label">${key.replace(/([A-Z])/g, ' $1').trim()}</div>
+                      <div class="value">${parseFloat(value).toFixed(2)}</div>
+                   </div>`;
+        });
+
+        Object.entries(data.club_data).forEach(([key, value]) => {
+            clubHTML += `<div class="data-item">
+                      <div class="label">${key.replace(/([A-Z])/g, ' $1').trim()}</div>
+                      <div class="value">${parseFloat(value).toFixed(2)}</div>
+                   </div>`;
+        });
+
+        document.getElementById("ball-data").innerHTML = ballHTML;
+        document.getElementById("club-data").innerHTML = clubHTML;
+    }
+
+    function fetchModifiers() {
+        fetch("/modifiers")
+            .then(response => response.json())
+            .then(data => updateModifiersDisplay(data))
+            .catch(() => updateModifiersDisplay(defaultModifiers)); // Use defaults if API fails
+    }
+
+    function refreshStatsImage() {
+        // Use cache busting query param and new endpoint /stats-image
+        document.getElementById("stats-image").src = "/stats-image?t=" + new Date().getTime();
+    }
+
+    function refreshPage() {
+        fetchModifiers();
+        refreshStatsImage();
+    }
+
+    setInterval(updateClock, 1000);
+
+    window.onload = () => {
+        refreshPage();
+        setInterval(refreshPage, 5000);
+    };
+</script>
+
+</body>
+</html>

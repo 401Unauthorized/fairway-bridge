@@ -1,0 +1,55 @@
+# Go build outputs
+/bin/
+/pkg/
+
+# Go dependency directories (if vendored)
+vendor/
+
+# Go test binaries and coverage reports
+*.test
+coverage.out
+
+# GoLand IDE files
+.idea/
+*.iml
+
+# VSCode settings (if applicable)
+.vscode/
+
+# Project-specific files to ignore
+shots.csv
+Assets/stats.png
+recordings/
+
+# Log files
+*.log
+
+# Work In Progress directories
+Simulators/TruGolf-E6/
+
+# macOS specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon file (must end with two \r)
+Icon
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
