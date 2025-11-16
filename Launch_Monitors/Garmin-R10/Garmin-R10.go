@@ -5,9 +5,10 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
 	"net"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -70,7 +71,7 @@ func (r *LaunchMonitor) Connect() error {
 				r.log.Errorf("accepting connection: %v", err)
 				continue
 			}
-			r.log.Infof("connection accepted")
+			r.log.Infof("connection accepted from %s", conn.RemoteAddr().String())
 			r.handleConnection(conn)
 		}
 	}()
@@ -91,12 +92,14 @@ func (r *LaunchMonitor) Close() error {
 func (r *LaunchMonitor) handleConnection(conn net.Conn) {
 	r.log.Infof("established a new connection")
 	r.client = conn
+	r.log.Debugf("client remote address: %s", conn.RemoteAddr().String())
 
 	// Start heartbeat: send a ping every heartbeatInterval.
 	r.heartbeatTicker = time.NewTicker(heartbeatInterval)
 	go func() {
+		r.log.Debugf("heartbeat goroutine started, interval: %s", heartbeatInterval.String())
 		for range r.heartbeatTicker.C {
-			r.log.Debugf("heatbeat ticker; sending ping...")
+			r.log.Debugf("heartbeat ticker tick at %s; sending ping...", time.Now().Format(time.RFC3339Nano))
 			r.sendPing()
 		}
 	}()
@@ -104,10 +107,11 @@ func (r *LaunchMonitor) handleConnection(conn net.Conn) {
 	// Use a scanner with a custom split function to detect complete JSON objects.
 	scanner := bufio.NewScanner(conn)
 	scanner.Split(jsonSplit)
+	r.log.Debugf("scanner configured with jsonSplit, starting receive loop")
 
 	for scanner.Scan() {
 		token := scanner.Bytes()
-		r.log.Debugf("received JSON: %s", token)
+		r.log.Debugf("received JSON token (%d bytes): %s", len(token), token)
 
 		var msg Message
 		if err := json.Unmarshal(token, &msg); err != nil {
@@ -120,7 +124,7 @@ func (r *LaunchMonitor) handleConnection(conn net.Conn) {
 	if err := scanner.Err(); err != nil {
 		r.log.Errorf("scanner error: %v", err)
 	}
-	r.log.Infof("scanner loop ended, disconnecting")
+	r.log.Infof("scanner loop ended for client %s, disconnecting", conn.RemoteAddr().String())
 	r.handleDisconnect()
 }
 
@@ -138,6 +142,9 @@ func (r *LaunchMonitor) handleIncomingData(msg Message) {
 		r.sendMessage(getHandshakeMessage(2))
 	case "Close":
 		r.log.Infof("received Close")
+		r.handleDisconnect()
+	case "Disconnect":
+		r.log.Infof("received Disconnect")
 		r.handleDisconnect()
 	case "Pong":
 		r.log.Infof("received Pong")
@@ -219,12 +226,17 @@ func (r *LaunchMonitor) sendShot() {
 	// Invoke the callback with the converted data.
 	r.log.Infof("invoking shot callback")
 	standardBall, standardClub := ConvertToStandard(r.ballData, r.clubData)
-	r.onShotCallback(standardBall, standardClub, Shared.ShotDataOptions{
-		ContainsBallData:          true,
-		ContainsClubData:          true,
-		LaunchMonitorBallDetected: true,
-		ClubType:                  string(r.clubType),
-	})
+	r.log.Debugf("converted shot -> standardBall: %+v, standardClub: %+v", standardBall, standardClub)
+	if r.onShotCallback != nil {
+		r.onShotCallback(standardBall, standardClub, Shared.ShotDataOptions{
+			ContainsBallData:          true,
+			ContainsClubData:          true,
+			LaunchMonitorBallDetected: true,
+			ClubType:                  string(r.clubType),
+		})
+	} else {
+		r.log.Warnf("onShotCallback is nil, skipping callback invocation")
+	}
 
 	// Respond to the launch monitor to ready for the next shot.
 	time.AfterFunc(700*time.Millisecond, func() {
@@ -247,18 +259,25 @@ func (r *LaunchMonitor) handlePong() {
 	r.log.Infof("pong received, resetting ping timer")
 	r.didReceivePong = true
 	if r.pingTimer != nil {
-		r.pingTimer.Stop()
+		stopped := r.pingTimer.Stop()
+		r.log.Debugf("stopped existing ping timer: %v", stopped)
 	}
 }
 
 // sendPing sends a ping and starts a timeout.
 func (r *LaunchMonitor) sendPing() {
-	r.log.Infof("initiating ping")
+	r.log.Infof("initiating ping at %s", time.Now().Format(time.RFC3339Nano))
 	r.didReceivePong = false
 	if r.client != nil {
 		r.log.Infof("sending ping to client at %s", r.client.RemoteAddr().String())
 		r.sendMessage(getSimCommand("Ping"))
+		// If an existing pingTimer exists, stop it and log that event.
+		if r.pingTimer != nil {
+			stopped := r.pingTimer.Stop()
+			r.log.Debugf("previous ping timer stopped before scheduling new one: %v", stopped)
+		}
 		r.pingTimer = time.AfterFunc(pingTimeoutDuration, func() {
+			r.log.Debugf("ping timeout check at %s (duration %s)", time.Now().Format(time.RFC3339Nano), pingTimeoutDuration.String())
 			if !r.didReceivePong {
 				r.log.Warnf("ping timeout - the R10 has stopped responding")
 				r.handleDisconnect()
@@ -266,6 +285,7 @@ func (r *LaunchMonitor) sendPing() {
 				r.log.Infof("pong received in time")
 			}
 		})
+		r.log.Debugf("ping timeout scheduled for %s from now", pingTimeoutDuration.String())
 	} else {
 		r.log.Warnf("no client to send ping")
 	}
@@ -275,11 +295,11 @@ func (r *LaunchMonitor) sendPing() {
 func (r *LaunchMonitor) sendMessage(msg string) {
 	r.log.Infof("preparing to send message: %s", msg)
 	if r.client != nil {
-		_, err := r.client.Write([]byte(msg + "\n"))
+		n, err := r.client.Write([]byte(msg + "\n"))
 		if err != nil {
 			r.log.Errorf("sending message: %v", err)
 		} else {
-			r.log.Infof("message sent successfully")
+			r.log.Infof("message sent successfully (%d bytes) to %s", n, r.client.RemoteAddr().String())
 		}
 	} else {
 		r.log.Warnf("no client connected to send message")

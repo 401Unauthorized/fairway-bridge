@@ -5,7 +5,7 @@
 <h1 align="center">Fairway Bridge (Beta)</h1>
 <h3 align="center">Fairway Bridge is an application that connects launch monitors, simulators, and cameras.</h3>
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-green.svg" />
+  <img alt="Version" src="https://img.shields.io/badge/version-0.1.1-green.svg" />
   <a href="https://github.com/401unauthorized/fairway-bridge#readme" target="_blank">
     <img alt="Documentation" src="https://img.shields.io/badge/documentation-yes-green.svg" />
   </a>
